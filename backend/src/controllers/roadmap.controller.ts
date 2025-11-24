@@ -116,7 +116,7 @@ export const getUserRoadmap = async (req: Request, res: Response) => {
 
     const roadmaps = await Roadmap.find({ userId });
 
-    return res.status(200).json({ success: true, roadmaps });
+    return res.status(200).json({ success: true, data: [...roadmaps] });
   } catch (error) {
     console.log("Error in getting users roadmap controller:", error);
     return res
@@ -135,7 +135,7 @@ export const getRoadmapById = async (req: Request, res: Response) => {
 
     const roadmap = await Roadmap.findById(id);
 
-    return res.status(200).json({ success: true, roadmap });
+    return res.status(200).json({ success: true, data:roadmap });
   } catch (error) {
     console.log("Error in get roadmap by id controller", error);
     return res
@@ -153,7 +153,6 @@ export const deleteRoadmap = async (req: Request, res: Response) => {
     return res
       .status(200)
       .json({ success: true, message: "roadmap deleted successfully!" });
-
   } catch (error) {
     console.log("Error in get roadmap by id controller", error);
     return res

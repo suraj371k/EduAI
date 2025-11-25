@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { RoadmapInput, RoadmapInputSchema } from "../schema/roadmap.schema";
 import Roadmap from "../models/roadmap.model";
 import { generateRoadmapTopics } from "../services/generateRoadmap";
+import mongoose from "mongoose";
+import { generateChapterForSubtopic } from "../services/chapterService";
 
 export const generateRoadmap = async (req: Request, res: Response) => {
   try {
@@ -135,7 +137,7 @@ export const getRoadmapById = async (req: Request, res: Response) => {
 
     const roadmap = await Roadmap.findById(id);
 
-    return res.status(200).json({ success: true, data:roadmap });
+    return res.status(200).json({ success: true, data: roadmap });
   } catch (error) {
     console.log("Error in get roadmap by id controller", error);
     return res
@@ -158,5 +160,122 @@ export const deleteRoadmap = async (req: Request, res: Response) => {
     return res
       .status(500)
       .json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const explainSubTopics = async (req: Request, res: Response) => {
+  try {
+    const { subtopicId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(subtopicId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid subtopic ID format",
+      });
+    }
+
+    const result = await Roadmap.aggregate([
+      { $unwind: "$topics" },
+      { $unwind: "$topics.subtopics" },
+      {
+        $match: {
+          "topics.subtopics._id": new mongoose.Types.ObjectId(subtopicId),
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          roadmapId: "$_id",
+          roadmapTitle: "$title",
+          topicName: "$topic.name",
+          subtopic: "$topics.subtopics",
+        },
+      },
+    ]);
+
+    if (result.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Subtopic not found",
+      });
+    }
+
+    const subtopic = result[0].subtopic;
+
+    //agent calling
+    const aiChapter = await generateChapterForSubtopic({
+      name: subtopic.name,
+      description: subtopic.description,
+    });
+
+    const cleanAiChapter = Array.isArray(aiChapter)
+      ? aiChapter.map((c) => c.text || "").join("")
+      : aiChapter;
+
+    await Roadmap.updateOne(
+      { "topics.subtopics._id": subtopicId },
+      {
+        $set: {
+          "topics.$[topic].subtopics.$[sub].aiChapter": cleanAiChapter,
+        },
+      },
+      {
+        arrayFilters: [
+          { "topic.subtopics._id": subtopicId },
+          { "sub._id": subtopicId },
+        ],
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...result[0],
+        aiChapter: cleanAiChapter,
+      },
+    });
+  } catch (error) {
+    console.log("Error in get subtopics", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
+export const getSubTopic = async (req: Request, res: Response) => {
+  try {
+    const { subtopicId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(subtopicId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid subtopic ID format",
+      });
+    }
+
+    const result = await Roadmap.aggregate([
+      { $unwind: "$topics" },
+      { $unwind: "$topics.subtopics" },
+      {
+        $match: {
+          "topics.subtopics._id": new mongoose.Types.ObjectId(subtopicId),
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          subtopic: "$topics.subtopics",
+        },
+      },
+    ]);
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    console.log("Error in getting subtopic", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error?.message,
+    });
   }
 };

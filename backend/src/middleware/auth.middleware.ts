@@ -44,7 +44,6 @@ export const authMiddleware = (
       userId: decoded.userId,  // Keep for backward compatibility
     };
 
-    console.log("✅ Auth middleware - User authenticated:", req.user.id);
 
     next();
   } catch (error: any) {
